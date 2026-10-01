@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PCS7 Style – 3D Process Unit (LIVE)</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0c1220; color: #e2e8f0; overflow: hidden; height: 100vh; }
+    #canvas-container { width: 100%; height: 100%; position: relative; }
+    canvas { display: block; }
+    #ui { position: absolute; inset: 0; pointer-events: none; }
+    .panel {
+      position: absolute;
+      background: rgba(12, 18, 32, 0.94);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      border-radius: 12px;
+      padding: 14px 16px;
+      pointer-events: auto;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.55);
+    }
+    #info-panel { top: 12px; left: 12px; width: 310px; max-height: calc(100vh - 110px); overflow-y: auto; }
+    #info-panel h1 { font-size: 1.1rem; font-weight: 650; color: #f8fafc; margin-bottom: 2px; }
+    #info-panel .subtitle { font-size: 0.72rem; color: #94a3b8; margin-bottom: 8px; }
+    #sensor-info { display: none; margin-top: 4px; }
+    #sensor-info h3 { font-size: 0.95rem; color: #38bdf8; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid rgba(148,163,184,0.2); }
+    .value-box { background: rgba(30,41,59,0.85); border-radius: 7px; padding: 8px 11px; margin: 5px 0; font-family: Consolas, Monaco, monospace; }
+    .value-box .label { font-size: 0.62rem; color: #94a3b8; text-transform: uppercase; }
+    .value-box .value { font-size: 1.2rem; font-weight: 700; color: #f8fafc; margin-top: 2px; }
+    .value-box .unit { font-size: 0.78rem; color: #94a3b8; margin-left: 3px; }
+    .status-ok { color: #22c55e !important; }
+    .status-warn { color: #eab308 !important; }
+    .status-alarm { color: #ef4444 !important; }
+    .status-off { color: #64748b !important; }
+    #sensor-desc { font-size: 0.72rem; line-height: 1.35; color: #94a3b8; margin: 8px 0 10px; }
+    .ctrl-block { margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(148,163,184,0.18); }
+    .ctrl-block h4 { font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 8px; }
+    .ctrl-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .ctrl-row label { font-size: 0.75rem; color: #cbd5e1; min-width: 28px; }
+    .ctrl-row input[type="range"] { flex: 1; accent-color: #3b82f6; height: 5px; }
+    .ctrl-row .sp-val { font-family: monospace; font-size: 0.8rem; font-weight: 600; color: #e2e8f0; min-width: 52px; text-align: right; }
+    .pump-btns { display: flex; gap: 8px; }
+    .pump-btn { flex: 1; padding: 8px 0; border: none; border-radius: 7px; font-size: 0.8rem; font-weight: 700; cursor: pointer; transition: 0.15s; }
+    .pump-btn.on { background: #14532d; color: #86efac; }
+    .pump-btn.on.active { background: #22c55e; color: #052e16; box-shadow: 0 0 0 2px #4ade80; }
+    .pump-btn.off { background: #374151; color: #9ca3af; }
+    .pump-btn.off.active { background: #6b7280; color: #f9fafb; box-shadow: 0 0 0 2px #9ca3af; }
+    .apply-btn { width: 100%; padding: 8px; background: #1e40af; color: white; border: none; border-radius: 7px; font-size: 0.78rem; font-weight: 600; cursor: pointer; }
+    .apply-btn:hover { background: #2563eb; }
+    #legend { top: 12px; right: 12px; max-width: 200px; }
+    #legend h3 { font-size: 0.8rem; margin-bottom: 7px; color: #f8fafc; }
+    .legend-item { display: flex; align-items: center; gap: 7px; margin-bottom: 4px; font-size: 0.7rem; }
+    .swatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+    #controls-hint { bottom: 12px; left: 12px; font-size: 0.68rem; color: #94a3b8; line-height: 1.35; }
+    #status { position: absolute; bottom: 12px; right: 12px; font-size: 0.62rem; color: #64748b; }
+    .btn { display: inline-block; margin-top: 8px; margin-right: 4px; padding: 5px 11px; background: #1e40af; color: white; border: none; border-radius: 6px; font-size: 0.72rem; cursor: pointer; }
+    .btn:hover { background: #2563eb; }
+    .btn.secondary { background: #334155; }
+    #overview { bottom: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 7px; flex-wrap: wrap; justify-content: center; max-width: 94%; padding: 6px 10px; }
+    .ov-card { background: rgba(30,41,59,0.85); border-radius: 6px; padding: 4px 8px; min-width: 86px; text-align: center; border: 1px solid rgba(148,163,184,0.15); }
+    .ov-card .ov-label { font-size: 0.57rem; color: #94a3b8; text-transform: uppercase; }
+    .ov-card .ov-value { font-size: 0.86rem; font-weight: 700; margin-top: 1px; font-family: monospace; }
+    #conn-status {
+      position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+      padding: 6px 14px; border-radius: 20px; font-size: 0.75rem; font-weight: 600;
+      pointer-events: none; z-index: 100;
+    }
+    .conn-ok { background: #14532d; color: #86efac; border: 1px solid #22c55e; }
+    .conn-fail { background: #7f1d1d; color: #fca5a5; border: 1px solid #ef4444; }
+    #cmd-feedback {
+      position: absolute; top: 50px; left: 50%; transform: translateX(-50%);
+      padding: 8px 16px; border-radius: 8px; font-size: 0.8rem; font-weight: 600;
+      pointer-events: none; z-index: 100; display: none;
+    }
+    .fb-ok { background: #14532d; color: #86efac; }
+    .fb-err { background: #7f1d1d; color: #fca5a5; }
+  </style>
+</head>
+<body>
+  <div id="canvas-container"></div>
+  <div id="ui">
+    <div id="conn-status" class="conn-fail">● DISCONNECTED</div>
+    <div id="cmd-feedback"></div>
+
+    <div id="info-panel" class="panel">
+      <h1>PCS7 – Process Unit</h1>
+      <div class="subtitle">3D Digital Twin · LIVE PLC</div>
+      <p style="font-size:0.72rem;color:#94a3b8;line-height:1.3;" id="hint-text">
+        Click a pump, valve, motor or sensor to view values and send commands.
+      </p>
+      <div id="sensor-info">
+        <h3 id="sensor-title">–</h3>
+        <div id="sensor-values"></div>
+        <p id="sensor-desc"></p>
+        <div id="sensor-controls"></div>
+      </div>
+      <button class="btn" onclick="resetView()">Reset View</button>
+      <button class="btn secondary" onclick="toggleAutoRotate()">Auto-Rotate</button>
+    </div>
+
+    <div id="legend" class="panel">
+      <h3>Equipment</h3>
+      <div class="legend-item"><div class="swatch" style="background:#1d4ed8"></div> PUMP A / PUMP B</div>
+      <div class="legend-item"><div class="swatch" style="background:#64748b"></div> VALVE A / B / Output / Fail</div>
+      <div class="legend-item"><div class="swatch" style="background:#16a34a"></div> MIXER MOTOR</div>
+      <div class="legend-item"><div class="swatch" style="background:#0891b2"></div> LEVEL PID</div>
+      <div class="legend-item"><div class="swatch" style="background:#ea580c"></div> TEMPERATUR</div>
+      <div class="legend-item"><div class="swatch" style="background:#ca8a04"></div> MIXER SENSOR</div>
+    </div>
+
+    <div id="controls-hint" class="panel">
+      <strong>Mouse</strong><br>Left-drag → Rotate<br>Scroll → Zoom<br>Click device → Control
+    </div>
+
+    <div id="overview" class="panel">
+      <div class="ov-card"><div class="ov-label">PUMP A</div><div class="ov-value" id="ov-p101">–</div></div>
+      <div class="ov-card"><div class="ov-label">PUMP B</div><div class="ov-value" id="ov-p102">–</div></div>
+      <div class="ov-card"><div class="ov-label">VALVE A</div><div class="ov-value" id="ov-xv101">–</div></div>
+      <div class="ov-card"><div class="ov-label">VALVE B</div><div class="ov-value" id="ov-xv102">–</div></div>
+      <div class="ov-card"><div class="ov-label">OUTPUT</div><div class="ov-value" id="ov-xv104">–</div></div>
+      <div class="ov-card"><div class="ov-label">FAIL</div><div class="ov-value" id="ov-xv103">–</div></div>
+      <div class="ov-card"><div class="ov-label">MIXER</div><div class="ov-value" id="ov-mixer">–</div></div>
+      <div class="ov-card"><div class="ov-label">LEVEL</div><div class="ov-value" id="ov-level">–</div></div>
+      <div class="ov-card"><div class="ov-label">TEMP</div><div class="ov-value" id="ov-temp">–</div></div>
+      <div class="ov-card"><div class="ov-label">SENSOR</div><div class="ov-value" id="ov-s101">–</div></div>
+    </div>
+    <div id="status">Siemens PCS7 Style · 3D Digital Twin · LIVE</div>
+  </div>
+
+  <script type="importmap">
+  { "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }}
+  </script>
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0c1220);
+    scene.fog = new THREE.Fog(0x0c1220, 55, 140);
+
+    const camera = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.1, 250);
+    camera.position.set(26, 18, 30);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    container.appendChild(renderer.domElement);
+
+    const labelRenderer = new CSS2DRenderer();
+    labelRenderer.setSize(innerWidth, innerHeight);
+    labelRenderer.domElement.style.cssText = 'position:absolute;top:0;pointer-events:none';
+    container.appendChild(labelRenderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.07;
+    controls.minDistance = 12;
+    controls.maxDistance = 80;
+    controls.target.set(0, 6, 0);
+    let autoRotate = false;
+
+    scene.add(new THREE.AmbientLight(0x64748b, 0.5));
+    const key = new THREE.DirectionalLight(0xfff8f0, 1.15);
+    key.position.set(28, 38, 22);
+    key.castShadow = true;
+    key.shadow.mapSize.set(2048, 2048);
+    key.shadow.camera.near = 4; key.shadow.camera.far = 100;
+    key.shadow.camera.left = -40; key.shadow.camera.right = 40;
+    key.shadow.camera.top = 40; key.shadow.camera.bottom = -40;
+    scene.add(key);
+    scene.add(new THREE.DirectionalLight(0x93c5fd, 0.28).translateX(-18).translateY(14).translateZ(-12));
+    scene.add(new THREE.HemisphereLight(0x94a3b8, 0x1e293b, 0.32));
+
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(100, 80),
+      new THREE.MeshStandardMaterial({ color: 0x1a2332, roughness: 0.92, metalness: 0.06 }));
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    scene.add(floor);
+    scene.add(new THREE.GridHelper(70, 35, 0x2d3a4f, 0x1a2332).translateY(0.02));
+
+    const mat = {
+      pumpBlue: new THREE.MeshStandardMaterial({ color: 0x1e40af, roughness: 0.32, metalness: 0.5 }),
+      pumpDark: new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.38, metalness: 0.55 }),
+      valveBody: new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.35, metalness: 0.65 }),
+      valveAct:  new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.4, metalness: 0.55 }),
+      tank:      new THREE.MeshStandardMaterial({ color: 0xcbd5e1, roughness: 0.45, metalness: 0.25 }),
+      metal:     new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.3, metalness: 0.75 }),
+      dark:      new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.4, metalness: 0.6 }),
+      pipeInA:   new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.38, metalness: 0.55 }),
+      pipeInB:   new THREE.MeshStandardMaterial({ color: 0x166534, roughness: 0.38, metalness: 0.55 }),
+      pipeOut:   new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.38, metalness: 0.55 }),
+      pipeFail:  new THREE.MeshStandardMaterial({ color: 0x9f1239, roughness: 0.38, metalness: 0.55 }),
+      flange:    new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.32, metalness: 0.8 }),
+      liquid:    new THREE.MeshStandardMaterial({ color: 0x0ea5e9, roughness: 0.2, metalness: 0.1, transparent: true, opacity: 0.78 }),
+      motor:     new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.38, metalness: 0.45 }),
+      levelTx:   new THREE.MeshStandardMaterial({ color: 0x0e7490, roughness: 0.4, metalness: 0.4 }),
+      tempTx:    new THREE.MeshStandardMaterial({ color: 0xc2410c, roughness: 0.4, metalness: 0.4 }),
+      mixSens:   new THREE.MeshStandardMaterial({ color: 0xa16207, roughness: 0.4, metalness: 0.4 }),
+      barBg:     new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.5, metalness: 0.25 }),
+      barFill:   new THREE.MeshStandardMaterial({ color: 0x22c55e, roughness: 0.28, metalness: 0.2 }),
+      barFrame:  new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.35, metalness: 0.65 }),
+      poolA:     new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.5, metalness: 0.3 }),
+      poolB:     new THREE.MeshStandardMaterial({ color: 0x14532d, roughness: 0.5, metalness: 0.3 }),
+    };
+
+    const live = {
+      p101: { on: false }, p102: { on: false },
+      xv101: { pos: 0 }, xv102: { pos: 0 },
+      xv103: { pos: 0 }, xv104: { pos: 0 },
+      mixer: { rpm: 0 },
+      level: { cm: 0 },
+      temp:  { c: 0 },
+      s101:  { ok: true }
+    };
+    const sp = { level: 0, xv101: 0, xv102: 0, xv103: 0, xv104: 0, mixer: 0 };
+    const API = "http://127.0.0.1:8000";
+
+    const clickables = [];
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    let selected = null;
+    let levelFillMesh = null, levelValueLabel = null;
+    const MAX_CM = 200;
+    let liquid = null, tankH = 8, barH = 5.5, barY0 = 2.2;
+
+    function showFeedback(msg, ok = true) {
+      const el = document.getElementById('cmd-feedback');
+      el.textContent = msg;
+      el.className = ok ? 'fb-ok' : 'fb-err';
+      el.style.display = 'block';
+      setTimeout(() => el.style.display = 'none', 2500);
+    }
+
+    function setConnStatus(ok) {
+      const el = document.getElementById('conn-status');
+      el.textContent = ok ? '● CONNECTED TO PLC' : '● DISCONNECTED';
+      el.className = ok ? 'conn-ok' : 'conn-fail';
+    }
+
+    function lbl(text, y = 0.75) {
+      const d = document.createElement('div');
+      d.textContent = text;
+      d.style.cssText = 'color:#f1f5f9;font-size:10px;font-weight:600;background:rgba(12,18,32,0.88);padding:2px 7px;border-radius:4px;white-space:nowrap;border:1px solid rgba(148,163,184,0.28);pointer-events:none;';
+      const o = new CSS2DObject(d);
+      o.position.y = y;
+      return o;
+    }
+    function clickable(mesh, id, name, desc) {
+      mesh.userData = { id, name, desc, isClickable: true };
+      clickables.push(mesh);
+      return mesh;
+    }
+
+    function pipe(from, to, r, m) {
+      const dir = new THREE.Vector3().subVectors(to, from);
+      const len = dir.length();
+      const mesh = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 16), m);
+      mesh.position.copy(from).add(to).multiplyScalar(0.5);
+      mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+      mesh.castShadow = true;
+      scene.add(mesh);
+      [from, to].forEach(p => {
+        const fl = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.85, r * 1.85, 0.14, 18), mat.flange);
+        fl.position.copy(p);
+        fl.quaternion.copy(mesh.quaternion);
+        scene.add(fl);
+      });
+      return mesh;
+    }
+
+    // Pools
+    function makePool(x, z, colorMat, name) {
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.BoxGeometry(4.5, 2.2, 3.2), colorMat);
+      body.position.y = 1.1;
+      body.castShadow = true;
+      g.add(body);
+      g.position.set(x, 0, z);
+      g.add(lbl(name, 2.8));
+      scene.add(g);
+    }
+    makePool(-20, 3.5, mat.poolA, 'POOL A');
+    makePool(-20, -5.5, mat.poolB, 'POOL B');
+
+    // Pumps
+    function makePump(x, z, id, name) {
+      const g = new THREE.Group();
+      const volute = new THREE.Mesh(new THREE.CylinderGeometry(1.45, 1.45, 1.25, 36), mat.pumpBlue);
+      volute.rotation.x = Math.PI / 2;
+      volute.position.set(0, 2.05, 0);
+      volute.castShadow = true;
+      g.add(volute);
+      const motor = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.85, 1.6, 20), mat.pumpDark);
+      motor.position.set(0, 2.05, -1.7);
+      motor.rotation.x = Math.PI / 2;
+      motor.castShadow = true;
+      g.add(motor);
+      g.add(new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.35, 2.2), mat.dark).translateY(0.9));
+      g.position.set(x, 0.5, z);
+      clickable(volute, id, name, 'Centrifugal process pump. Click to start/stop.');
+      volute.add(lbl(name, 1.1));
+      scene.add(g);
+    }
+    makePump(-14.5, 3.5, 'p101', 'PUMP A');
+    makePump(-14.5, -5.5, 'p102', 'PUMP B');
+
+    // Valves
+    function makeValve(x, y, z, id, name) {
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.9, 16), mat.valveBody);
+      body.rotation.z = Math.PI / 2;
+      body.castShadow = true;
+      g.add(body);
+      const act = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.7, 12), mat.valveAct);
+      act.position.y = 0.7;
+      g.add(act);
+      g.position.set(x, y, z);
+      clickable(body, id, name, 'Process control valve.');
+      body.add(lbl(name, 0.9));
+      scene.add(g);
+    }
+    makeValve(-6.5, 2.7, 3.5, 'xv101', 'VALVE A');
+    makeValve(-6.5, 2.7, -5.5, 'xv102', 'VALVE B');
+    makeValve(9.5, 3.6, 2.8, 'xv104', 'OUTPUT');
+    makeValve(9.5, 1.8, -4.2, 'xv103', 'FAIL');
+
+    // Tank
+    const tankR = 4.2;
+    tankH = 8;
+    const tankG = new THREE.Group();
+    const tankBody = new THREE.Mesh(new THREE.CylinderGeometry(tankR, tankR, tankH, 48), mat.tank);
+    tankBody.position.y = tankH / 2 + 1.5;
+    tankBody.castShadow = true;
+    tankG.add(tankBody);
+
+    liquid = new THREE.Mesh(new THREE.CylinderGeometry(tankR - 0.12, tankR - 0.12, 1, 32), mat.liquid);
+    liquid.position.y = 2.2;
+    tankG.add(liquid);
+
+    const barX = tankR + 1.8;
+    barY0 = 2.2; barH = 5.5;
+    const barG = new THREE.Group();
+    barG.add(new THREE.Mesh(new THREE.BoxGeometry(0.35, barH + 0.3, 0.12), mat.barFrame).translateX(barX).translateY(barY0 + barH/2));
+    const bg = new THREE.Mesh(new THREE.BoxGeometry(0.28, barH, 0.08), mat.barBg);
+    bg.position.set(barX, barY0 + barH/2, 0.02);
+    barG.add(bg);
+    levelFillMesh = new THREE.Mesh(new THREE.BoxGeometry(0.26, 1, 0.09), mat.barFill);
+    levelFillMesh.position.set(barX, barY0 + 0.5, 0.03);
+    barG.add(levelFillMesh);
+
+    [0,50,100,150,200].forEach(v => {
+      const y = barY0 + (v / MAX_CM) * barH;
+      barG.add(new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.035, 0.05), mat.metal).translateX(barX + 0.35).translateY(y).translateZ(0.1));
+      const nd = document.createElement('div');
+      nd.textContent = v;
+      nd.style.cssText = 'color:#e2e8f0;font-size:10px;font-weight:600;font-family:monospace;background:rgba(15,23,42,0.75);padding:1px 4px;border-radius:3px;';
+      const nl = new CSS2DObject(nd);
+      nl.position.set(barX + 0.7, y, 0);
+      barG.add(nl);
+    });
+    const vd = document.createElement('div');
+    vd.textContent = '0';
+    vd.style.cssText = 'color:#22c55e;font-size:17px;font-weight:700;font-family:monospace;background:rgba(15,23,42,0.92);padding:3px 9px;border-radius:5px;border:1px solid #22c55e;min-width:50px;text-align:center;';
+    levelValueLabel = new CSS2DObject(vd);
+    levelValueLabel.position.set(barX, barY0 + barH + 1.05, 0);
+    barG.add(levelValueLabel);
+    tankG.add(barG);
+    scene.add(tankG);
+
+    // Mixer
+    const motG = new THREE.Group();
+    const mBody = new THREE.Mesh(new THREE.CylinderGeometry(0.78, 0.78, 1.35, 20), mat.motor);
+    mBody.position.y = tankH + 3.15;
+    mBody.castShadow = true;
+    motG.add(mBody);
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, tankH * 0.65, 10), mat.metal);
+    shaft.position.y = tankH * 0.42 + 1.7;
+    motG.add(shaft);
+    const impeller = new THREE.Group();
+    for (let i = 0; i < 4; i++) {
+      const b = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.09, 0.36), mat.metal);
+      b.rotation.y = (i / 4) * Math.PI * 2;
+      impeller.add(b);
+    }
+    impeller.position.y = 3.9;
+    motG.add(impeller);
+    clickable(mBody, 'mixer', 'MIXER MOTOR', 'Top-entry agitator. Set speed 0-1800 rpm.');
+    mBody.add(lbl('MIXER MOTOR', 1.15));
+    scene.add(motG);
+
+    // Sensors
+    function sens(x, y, z, m, id, name, desc, label) {
+      const g = new THREE.Group();
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.72, 0.46), m);
+      head.castShadow = true;
+      g.add(head);
+      g.position.set(x, y, z);
+      clickable(head, id, name, desc);
+      head.add(lbl(label, 0.65));
+      scene.add(g);
+    }
+    sens(tankR + 1.25, tankH + 0.25, 1.1, mat.levelTx, 'level', 'LEVEL PID', 'Level 0–200 cm. Setpoint available.', 'LEVEL PID');
+    sens(-tankR - 0.85, 6.2, 1.1, mat.tempTx, 'temp', 'TEMPERATUR', 'Process temperature (read only).', 'TEMPERATUR');
+    sens(0.9, 2.2, tankR + 0.9, mat.mixSens, 's101', 'MIXER SENSOR', 'Mixer status OK / NOT OK (read only).', 'MIXER SENSOR');
+
+    // Piping
+    pipe(new THREE.Vector3(-17.7, 1.9, 3.5), new THREE.Vector3(-14.5, 1.9, 3.5), 0.3, mat.pipeInA);
+    pipe(new THREE.Vector3(-13, 3.6, 3.5), new THREE.Vector3(-7.3, 3.6, 3.5), 0.28, mat.pipeInA);
+    pipe(new THREE.Vector3(-7.3, 3.6, 3.5), new THREE.Vector3(-7.3, 2.7, 3.5), 0.28, mat.pipeInA);
+    pipe(new THREE.Vector3(-5.7, 2.2, 3.5), new THREE.Vector3(-3.5, 2.2, 3.5), 0.28, mat.pipeInA);
+    pipe(new THREE.Vector3(-3.5, 2.2, 3.5), new THREE.Vector3(-3.5, 5.5, 3.5), 0.28, mat.pipeInA);
+    pipe(new THREE.Vector3(-3.5, 5.5, 3.5), new THREE.Vector3(-tankR + 0.15, 5.5, 1.2), 0.28, mat.pipeInA);
+
+    pipe(new THREE.Vector3(-17.7, 1.9, -5.5), new THREE.Vector3(-14.5, 1.9, -5.5), 0.28, mat.pipeInB);
+    pipe(new THREE.Vector3(-13, 3.6, -5.5), new THREE.Vector3(-7.3, 3.6, -5.5), 0.26, mat.pipeInB);
+    pipe(new THREE.Vector3(-7.3, 3.6, -5.5), new THREE.Vector3(-7.3, 2.7, -5.5), 0.26, mat.pipeInB);
+    pipe(new THREE.Vector3(-5.7, 2.2, -5.5), new THREE.Vector3(-3.4, 2.2, -5.5), 0.26, mat.pipeInB);
+    pipe(new THREE.Vector3(-3.4, 2.2, -5.5), new THREE.Vector3(-3.4, 3.6, -2.8), 0.26, mat.pipeInB);
+    pipe(new THREE.Vector3(-3.4, 3.6, -2.8), new THREE.Vector3(-tankR + 0.15, 3.6, -1.3), 0.26, mat.pipeInB);
+
+    pipe(new THREE.Vector3(tankR - 0.1, 3.6, 1.6), new THREE.Vector3(8.7, 3.6, 2.8), 0.25, mat.pipeOut);
+    pipe(new THREE.Vector3(10.3, 3.6, 2.8), new THREE.Vector3(16, 3.6, 2.8), 0.25, mat.pipeOut);
+    pipe(new THREE.Vector3(0.7, 1.55, 0), new THREE.Vector3(0.7, 1.55, -4.2), 0.22, mat.pipeFail);
+    pipe(new THREE.Vector3(0.7, 1.55, -4.2), new THREE.Vector3(8.7, 1.8, -4.2), 0.22, mat.pipeFail);
+    pipe(new THREE.Vector3(10.3, 1.8, -4.2), new THREE.Vector3(16, 1.8, -4.2), 0.22, mat.pipeFail);
+
+    function dest(text, pos) {
+      const d = document.createElement('div');
+      d.textContent = text;
+      d.style.cssText = 'color:#94a3b8;font-size:11px;font-weight:600;background:rgba(12,18,32,0.8);padding:3px 9px;border-radius:5px;border:1px solid rgba(148,163,184,0.22);';
+      const o = new CSS2DObject(d);
+      o.position.copy(pos);
+      scene.add(o);
+    }
+    dest('TO ZONE 2', new THREE.Vector3(17.2, 3.6, 2.8));
+    dest('TO RECYCLE PROCESS', new THREE.Vector3(17.8, 1.8, -4.2));
+
+    // ---------- Connection + Commands ----------
+    function connectWebSocket() {
+      const ws = new WebSocket("ws://127.0.0.1:8000/ws");
+      ws.onopen = () => setConnStatus(true);
+      ws.onmessage = (event) => {
+        const d = JSON.parse(event.data);
+        live.p101.on = !!d.p101;
+        live.p102.on = !!d.p102;
+        live.xv101.pos = d.xv101 || 0;
+        live.xv102.pos = d.xv102 || 0;
+        live.xv103.pos = d.xv103 || 0;
+        live.xv104.pos = d.xv104 || 0;
+        live.mixer.rpm = d.mixer || 0;
+        live.level.cm  = d.level || 0;
+        live.temp.c    = d.temp || 0;
+        live.s101.ok   = !!d.s101;
+        sp.xv101 = d.xv101_sp || 0; sp.xv102 = d.xv102_sp || 0;
+        sp.xv103 = d.xv103_sp || 0; sp.xv104 = d.xv104_sp || 0;
+        sp.mixer = d.mixer_sp || 0; sp.level = d.level_sp || 0;
+
+        if (liquid) {
+          const h = Math.max(0.22, (live.level.cm / MAX_CM) * (tankH - 2));
+          liquid.scale.y = h;
+          liquid.position.y = 1.75 + h / 2;
+        }
+        if (levelFillMesh) {
+          const fh = Math.max(0.1, (live.level.cm / MAX_CM) * barH);
+          levelFillMesh.scale.y = fh;
+          levelFillMesh.position.y = barY0 + fh / 2;
+        }
+        if (levelValueLabel?.element) {
+          levelValueLabel.element.textContent = Math.round(live.level.cm);
+          const col = live.level.cm > 180 ? '#ef4444' : live.level.cm < 40 ? '#eab308' : '#22c55e';
+          levelValueLabel.element.style.color = col;
+          levelValueLabel.element.style.borderColor = col;
+        }
+        updateOverview();
+        if (selected) updateValues(selected);
+      };
+      ws.onclose = () => {
+        setConnStatus(false);
+        setTimeout(connectWebSocket, 2000);
+      };
+      ws.onerror = () => setConnStatus(false);
+    }
+    connectWebSocket();
+
+    // Also poll as backup every 2 seconds
+    setInterval(async () => {
+      try {
+        const r = await fetch(API + '/api/live');
+        if (r.ok) {
+          setConnStatus(true);
+          const d = await r.json();
+          // same update as websocket
+          live.p101.on = !!d.p101; live.p102.on = !!d.p102;
+          live.xv101.pos = d.xv101||0; live.xv102.pos = d.xv102||0;
+          live.xv103.pos = d.xv103||0; live.xv104.pos = d.xv104||0;
+          live.mixer.rpm = d.mixer||0; live.level.cm = d.level||0;
+          live.temp.c = d.temp||0; live.s101.ok = !!d.s101;
+          sp.xv101 = d.xv101_sp||0; sp.xv102 = d.xv102_sp||0;
+          sp.xv103 = d.xv103_sp||0; sp.xv104 = d.xv104_sp||0;
+          sp.mixer = d.mixer_sp||0; sp.level = d.level_sp||0;
+          updateOverview();
+          if (selected) updateValues(selected);
+        }
+      } catch(e) { setConnStatus(false); }
+    }, 2000);
+
+    function buildControls(id) {
+      const c = document.getElementById('sensor-controls');
+      c.innerHTML = '';
+      if (id === 'p101' || id === 'p102') {
+        const on = live[id].on;
+        c.innerHTML = `<div class="ctrl-block"><h4>Command</h4>
+          <div class="pump-btns">
+            <button class="pump-btn on ${on?'active':''}" onclick="window.cmdPump('${id}',true)">ON</button>
+            <button class="pump-btn off ${!on?'active':''}" onclick="window.cmdPump('${id}',false)">OFF</button>
+          </div></div>`;
+      }
+      if (id.startsWith('xv')) {
+        c.innerHTML = `<div class="ctrl-block"><h4>Position Setpoint</h4>
+          <div class="ctrl-row"><label>SP</label>
+            <input type="range" id="local-sp" min="0" max="100" value="${sp[id]}"
+              oninput="document.getElementById('local-sp-val').textContent=this.value+' %'">
+            <span class="sp-val" id="local-sp-val">${sp[id]} %</span></div>
+          <button class="apply-btn" onclick="window.applyValveSp('${id}')">Apply Setpoint</button></div>`;
+      }
+      if (id === 'mixer') {
+        c.innerHTML = `<div class="ctrl-block"><h4>Speed Setpoint</h4>
+          <div class="ctrl-row"><label>SP</label>
+            <input type="range" id="local-sp" min="0" max="1800" step="10" value="${sp.mixer}"
+              oninput="document.getElementById('local-sp-val').textContent=this.value+' rpm'">
+            <span class="sp-val" id="local-sp-val">${sp.mixer} rpm</span></div>
+          <button class="apply-btn" onclick="window.applyMixerSp()">Apply Setpoint</button></div>`;
+      }
+      if (id === 'level') {
+        c.innerHTML = `<div class="ctrl-block"><h4>Level Setpoint</h4>
+          <div class="ctrl-row"><label>SP</label>
+            <input type="range" id="local-sp" min="0" max="200" value="${sp.level}"
+              oninput="document.getElementById('local-sp-val').textContent=this.value+' cm'">
+            <span class="sp-val" id="local-sp-val">${sp.level} cm</span></div>
+          <button class="apply-btn" onclick="window.applyLevelSp()">Apply Setpoint</button></div>`;
+      }
+      // temp and s101 have no controls (read-only)
+    }
+
+    window.cmdPump = async (id, on) => {
+      try {
+        const r = await fetch(`${API}/api/pump/${id}?on=${on}`, { method: "POST" });
+        if (r.ok) {
+          showFeedback(`Pump ${id.toUpperCase()} → ${on ? 'ON' : 'OFF'}`, true);
+        } else {
+          showFeedback(`Failed to command pump (${r.status})`, false);
+        }
+      } catch (e) {
+        showFeedback('Backend not reachable – is uvicorn running?', false);
+        console.error(e);
+      }
+    };
+
+    window.applyValveSp = async (id) => {
+      const el = document.getElementById('local-sp');
+      if (!el) return;
+      const value = +el.value;
+      try {
+        const r = await fetch(`${API}/api/valve/${id}?value=${value}`, { method: "POST" });
+        if (r.ok) showFeedback(`Valve ${id.toUpperCase()} SP = ${value}%`, true);
+        else showFeedback(`Failed to set valve (${r.status})`, false);
+      } catch (e) {
+        showFeedback('Backend not reachable', false);
+      }
+    };
+
+    window.applyMixerSp = async () => {
+      const el = document.getElementById('local-sp');
+      if (!el) return;
+      const value = +el.value;
+      try {
+        const r = await fetch(`${API}/api/mixer?value=${value}`, { method: "POST" });
+        if (r.ok) showFeedback(`Mixer SP = ${value} rpm`, true);
+        else showFeedback(`Failed to set mixer (${r.status})`, false);
+      } catch (e) {
+        showFeedback('Backend not reachable', false);
+      }
+    };
+
+    window.applyLevelSp = async () => {
+      const el = document.getElementById('local-sp');
+      if (!el) return;
+      const value = +el.value;
+      try {
+        const r = await fetch(`${API}/api/level?value=${value}`, { method: "POST" });
+        if (r.ok) showFeedback(`Level SP = ${value} cm`, true);
+        else showFeedback(`Failed to set level (${r.status})`, false);
+      } catch (e) {
+        showFeedback('Backend not reachable', false);
+      }
+    };
+
+    function updateValues(obj) {
+      const id = obj.userData.id, d = live[id];
+      if (!d) return;
+      let html = '';
+      if (id === 'p101' || id === 'p102')
+        html = `<div class="value-box"><div class="label">Status (PV)</div><div class="value ${d.on?'status-ok':'status-off'}">${d.on?'ON':'OFF'}</div></div>`;
+      else if (id.startsWith('xv'))
+        html = `<div class="value-box"><div class="label">Position (PV)</div><div class="value">${d.pos.toFixed(0)}<span class="unit">%</span></div></div>
+                <div class="value-box"><div class="label">Setpoint (SP)</div><div class="value">${sp[id]}<span class="unit">%</span></div></div>`;
+      else if (id === 'mixer')
+        html = `<div class="value-box"><div class="label">Speed (PV)</div><div class="value">${d.rpm.toFixed(0)}<span class="unit">rpm</span></div></div>
+                <div class="value-box"><div class="label">Setpoint (SP)</div><div class="value">${sp.mixer}<span class="unit">rpm</span></div></div>`;
+      else if (id === 'level') {
+        const cls = d.cm > 180 ? 'status-alarm' : d.cm < 40 ? 'status-warn' : 'status-ok';
+        html = `<div class="value-box"><div class="label">Level (PV)</div><div class="value ${cls}">${d.cm.toFixed(0)}<span class="unit">cm</span></div></div>
+                <div class="value-box"><div class="label">Setpoint (SP)</div><div class="value">${sp.level}<span class="unit">cm</span></div></div>`;
+      } else if (id === 'temp')
+        html = `<div class="value-box"><div class="label">Temperature</div><div class="value">${d.c.toFixed(1)}<span class="unit">°C</span></div></div>`;
+      else if (id === 's101')
+        html = `<div class="value-box"><div class="label">Status</div><div class="value ${d.ok?'status-ok':'status-alarm'}">${d.ok?'OK':'NOT OK'}</div></div>
+                <p style="font-size:0.7rem;color:#94a3b8;margin-top:6px;">This sensor is read-only. No command available.</p>`;
+      document.getElementById('sensor-values').innerHTML = html;
+    }
+
+    function updatePanel(obj) {
+      document.getElementById('sensor-title').textContent = obj.userData.name;
+      document.getElementById('hint-text').style.display = 'none';
+      document.getElementById('sensor-desc').textContent = obj.userData.desc;
+      updateValues(obj);
+      buildControls(obj.userData.id);
+      document.getElementById('sensor-info').style.display = 'block';
+    }
+
+    function onClick(e) {
+      if (e.target.closest('.panel')) return;
+      mouse.x = (e.clientX / innerWidth) * 2 - 1;
+      mouse.y = -(e.clientY / innerHeight) * 2 + 1;
+      raycaster.setFromCamera(mouse, camera);
+      const hits = raycaster.intersectObjects(clickables, true);
+      if (hits.length) {
+        let obj = hits[0].object;
+        while (obj && !obj.userData.isClickable) obj = obj.parent;
+        if (obj?.userData.isClickable) {
+          selected = obj;
+          updatePanel(selected);
+          clickables.forEach(c => c.scale.setScalar(1));
+          selected.scale.setScalar(1.18);
+        }
+      } else {
+        selected = null;
+        document.getElementById('sensor-info').style.display = 'none';
+        document.getElementById('hint-text').style.display = 'block';
+        clickables.forEach(c => c.scale.setScalar(1));
+      }
+    }
+    addEventListener('click', onClick);
+
+    window.resetView = () => {
+      camera.position.set(26, 18, 30);
+      controls.target.set(0, 6, 0);
+      controls.update();
+      selected = null;
+      document.getElementById('sensor-info').style.display = 'none';
+      document.getElementById('hint-text').style.display = 'block';
+      clickables.forEach(c => c.scale.setScalar(1));
+    };
+    window.toggleAutoRotate = () => {
+      autoRotate = !autoRotate;
+      controls.autoRotate = autoRotate;
+      controls.autoRotateSpeed = 0.35;
+    };
+
+    function updateOverview() {
+      const s = (id, t, c) => { const e = document.getElementById(id); e.textContent = t; e.className = 'ov-value ' + (c||''); };
+      s('ov-p101', live.p101.on?'ON':'OFF', live.p101.on?'status-ok':'status-off');
+      s('ov-p102', live.p102.on?'ON':'OFF', live.p102.on?'status-ok':'status-off');
+      s('ov-xv101', live.xv101.pos.toFixed(0)+'%');
+      s('ov-xv102', live.xv102.pos.toFixed(0)+'%');
+      s('ov-xv103', live.xv103.pos.toFixed(0)+'%');
+      s('ov-xv104', live.xv104.pos.toFixed(0)+'%');
+      s('ov-mixer', live.mixer.rpm.toFixed(0)+' rpm');
+      s('ov-level', live.level.cm.toFixed(0)+' cm');
+      s('ov-temp', live.temp.c.toFixed(1)+' °C');
+      s('ov-s101', live.s101.ok?'OK':'NOT OK', live.s101.ok?'status-ok':'status-alarm');
+    }
+    updateOverview();
+
+    let t = 0;
+    function animate() {
+      requestAnimationFrame(animate);
+      t += 0.016;
+      const spd = live.mixer.rpm / 1500;
+      impeller.rotation.y = t * 3.6 * spd;
+      shaft.rotation.y = impeller.rotation.y;
+      clickables.forEach((c,i) => { if (c !== selected) c.scale.setScalar(1 + 0.022*Math.sin(t*2 + i*0.5)); });
+      controls.update();
+      renderer.render(scene, camera);
+      labelRenderer.render(scene, camera);
+    }
+    animate();
+
+    addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+      labelRenderer.setSize(innerWidth, innerHeight);
+    });
+  </script>
+</body>
+</html>
